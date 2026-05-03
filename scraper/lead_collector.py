@@ -46,12 +46,17 @@ class LeadCollector:
         leads: list[dict] = []
 
         if self.use_google:
-            logger.info("=== Google Scraper ===")
+            logger.info("=== Search Scraper (DuckDuckGo/SerpAPI) ===")
             gs = GoogleScraper()
             from scraper.google_scraper import SEARCH_QUERIES
             queries = SEARCH_QUERIES[:max_google_queries] if max_google_queries else SEARCH_QUERIES
-            leads += gs.collect_leads(queries=queries)
-            logger.info("Google: %d raw leads", len(leads))
+            logger.info("Running %d search queries...", len(queries))
+            new_leads = gs.collect_leads(queries=queries)
+            leads += new_leads
+            logger.info("Search: %d raw leads found", len(new_leads))
+            # Save partial results immediately so nothing is lost
+            if new_leads:
+                self._save(leads)
 
         if self.use_directories:
             logger.info("=== Directory Scraper ===")
