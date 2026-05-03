@@ -1,0 +1,107 @@
+{
+  "name": "Meta Ads Lead Follow-up",
+  "description": "Receives new leads from Meta Ads and sends WhatsApp follow-up automatically",
+  "nodes": [
+    {
+      "id": "lead-webhook",
+      "name": "Meta Lead Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "parameters": {
+        "path": "meta-lead",
+        "method": "POST"
+      },
+      "position": [250, 300]
+    },
+    {
+      "id": "extract-lead",
+      "name": "Extract Lead Data",
+      "type": "n8n-nodes-base.set",
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "leadId", "value": "={{$json.entry[0].changes[0].value.leadgen_id}}" },
+            { "name": "formId", "value": "={{$json.entry[0].changes[0].value.form_id}}" },
+            { "name": "pageId", "value": "={{$json.entry[0].changes[0].value.page_id}}" }
+          ]
+        }
+      },
+      "position": [450, 300]
+    },
+    {
+      "id": "get-lead-details",
+      "name": "Get Lead Details from Meta",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/v19.0/{{$json.leadId}}",
+        "queryParameters": {
+          "parameters": [
+            { "name": "fields", "value": "field_data,created_time" },
+            { "name": "access_token", "value": "={{$env.META_ADS_TOKEN}}" }
+          ]
+        }
+      },
+      "position": [650, 300]
+    },
+    {
+      "id": "parse-fields",
+      "name": "Parse Lead Fields",
+      "type": "n8n-nodes-base.code",
+      "parameters": {
+        "jsCode": "const fieldData = items[0].json.field_data || [];\nconst fields = {};\nfor (const f of fieldData) { fields[f.name] = f.values[0]; }\nreturn [{ json: { ...items[0].json, ...fields } }];"
+      },
+      "position": [850, 300]
+    },
+    {
+      "id": "send-whatsapp",
+      "name": "Send WhatsApp to Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v19.0/{{$env.WHATSAPP_PHONE_NUMBER_ID}}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "body": {
+          "messaging_product": "whatsapp",
+          "to": "={{$json.phone_number}}",
+          "type": "text",
+          "text": {
+            "body": "=Hola {{$json.full_name || 'Cliente'}}! Soy del equipo de Bonded Air Cargo. Vi que solicitaste información sobre nuestros envíos Miami → RD/Haití. ¿En qué puedo ayudarte?"
+          }
+        }
+      },
+      "position": [1050, 300]
+    },
+    {
+      "id": "log-lead-sheets",
+      "name": "Log Lead to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "parameters": {
+        "operation": "append",
+        "documentId": "={{$env.GOOGLE_SHEET_LEADS_ID}}",
+        "sheetName": "Leads",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "date": "={{new Date().toISOString()}}",
+            "leadId": "={{$json.leadId}}",
+            "name": "={{$json.full_name}}",
+            "phone": "={{$json.phone_number}}",
+            "email": "={{$json.email}}",
+            "source": "Meta Ads",
+            "status": "NEW"
+          }
+        }
+      },
+      "position": [1050, 450]
+    }
+  ],
+  "connections": {
+    "lead-webhook": { "main": [[{ "node": "extract-lead" }]] },
+    "extract-lead": { "main": [[{ "node": "get-lead-details" }]] },
+    "get-lead-details": { "main": [[{ "node": "parse-fields" }]] },
+    "parse-fields": {
+      "main": [[{ "node": "send-whatsapp" }, { "node": "log-lead-sheets" }]]
+    }
+  }
+}

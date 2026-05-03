@@ -1,0 +1,135 @@
+{
+  "name": "WhatsApp Incoming Message Handler",
+  "description": "Receives WhatsApp messages via webhook and routes to appropriate handler",
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "WhatsApp Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "parameters": {
+        "path": "whatsapp",
+        "method": "POST",
+        "responseMode": "responseNode"
+      },
+      "position": [250, 300]
+    },
+    {
+      "id": "respond-200",
+      "name": "Respond 200 OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "responseCode": 200
+      },
+      "position": [450, 150]
+    },
+    {
+      "id": "extract-message",
+      "name": "Extract Message Data",
+      "type": "n8n-nodes-base.set",
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "from", "value": "={{$json.entry[0].changes[0].value.messages[0].from}}" },
+            { "name": "messageText", "value": "={{$json.entry[0].changes[0].value.messages[0].text.body}}" },
+            { "name": "customerName", "value": "={{$json.entry[0].changes[0].value.contacts[0].profile.name}}" },
+            { "name": "messageId", "value": "={{$json.entry[0].changes[0].value.messages[0].id}}" }
+          ]
+        }
+      },
+      "position": [450, 400]
+    },
+    {
+      "id": "check-keyword",
+      "name": "Check Keyword",
+      "type": "n8n-nodes-base.switch",
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{$json.messageText.toLowerCase()}}",
+        "rules": {
+          "rules": [
+            { "operation": "contains", "value2": "rastrear", "output": 0 },
+            { "operation": "contains", "value2": "tracking", "output": 0 },
+            { "operation": "contains", "value2": "precio", "output": 1 },
+            { "operation": "contains", "value2": "hola", "output": 2 }
+          ]
+        },
+        "fallbackOutput": 3
+      },
+      "position": [650, 400]
+    },
+    {
+      "id": "send-tracking-prompt",
+      "name": "Ask for AWB",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v19.0/{{$env.WHATSAPP_PHONE_NUMBER_ID}}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "body": {
+          "messaging_product": "whatsapp",
+          "to": "={{$json.from}}",
+          "type": "text",
+          "text": { "body": "Por favor escríbeme tu número de AWB para rastrear tu paquete." }
+        }
+      },
+      "position": [900, 300]
+    },
+    {
+      "id": "send-pricing",
+      "name": "Send Pricing Info",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v19.0/{{$env.WHATSAPP_PHONE_NUMBER_ID}}/messages",
+        "body": {
+          "messaging_product": "whatsapp",
+          "to": "={{$json.from}}",
+          "type": "text",
+          "text": { "body": "Tarifa base: $3.50/lb. Mínimo 5 lbs. Contacta un agente para cotización exacta." }
+        }
+      },
+      "position": [900, 400]
+    },
+    {
+      "id": "log-to-sheets",
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "parameters": {
+        "operation": "append",
+        "documentId": "={{$env.GOOGLE_SHEET_MESSAGES_ID}}",
+        "sheetName": "Messages",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{new Date().toISOString()}}",
+            "from": "={{$json.from}}",
+            "name": "={{$json.customerName}}",
+            "message": "={{$json.messageText}}"
+          }
+        }
+      },
+      "position": [900, 500]
+    }
+  ],
+  "connections": {
+    "webhook-trigger": {
+      "main": [
+        [{ "node": "respond-200" }, { "node": "extract-message" }]
+      ]
+    },
+    "extract-message": {
+      "main": [
+        [{ "node": "check-keyword" }, { "node": "log-to-sheets" }]
+      ]
+    },
+    "check-keyword": {
+      "main": [
+        [{ "node": "send-tracking-prompt" }],
+        [{ "node": "send-pricing" }]
+      ]
+    }
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "name": "Shipment Status Auto-Alert",
+  "description": "Triggered by webhook when shipment status changes, sends WhatsApp + Email notifications",
+  "nodes": [
+    {
+      "id": "status-webhook",
+      "name": "Status Change Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "parameters": {
+        "path": "status-update",
+        "method": "POST"
+      },
+      "position": [250, 300]
+    },
+    {
+      "id": "send-whatsapp-update",
+      "name": "Send WhatsApp Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v19.0/{{$env.WHATSAPP_PHONE_NUMBER_ID}}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "body": {
+          "messaging_product": "whatsapp",
+          "to": "={{$json.customerPhone}}",
+          "type": "text",
+          "text": {
+            "body": "=✈️ Bonded Air Cargo\n\nHola {{$json.customerName}}, tu paquete AWB {{$json.awb}} cambió de estado:\n\n→ {{$json.status}}\n\n{{$json.note || 'Para más info escríbenos.'}}'"
+          }
+        }
+      },
+      "position": [500, 200]
+    },
+    {
+      "id": "send-email",
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "parameters": {
+        "toEmail": "={{$json.customerEmail}}",
+        "subject": "=Actualización AWB {{$json.awb}} - Bonded Air Cargo",
+        "text": "=Tu paquete {{$json.awb}} cambió de estado: {{$json.status}}. Destino: {{$json.destination}}."
+      },
+      "position": [500, 400]
+    },
+    {
+      "id": "update-sheets",
+      "name": "Update Shipment in Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "parameters": {
+        "operation": "append",
+        "documentId": "={{$env.GOOGLE_SHEET_SHIPMENTS_ID}}",
+        "sheetName": "StatusLog",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{new Date().toISOString()}}",
+            "awb": "={{$json.awb}}",
+            "status": "={{$json.status}}",
+            "note": "={{$json.note}}",
+            "customer": "={{$json.customerName}}"
+          }
+        }
+      },
+      "position": [500, 550]
+    }
+  ],
+  "connections": {
+    "status-webhook": {
+      "main": [[{ "node": "send-whatsapp-update" }, { "node": "send-email" }, { "node": "update-sheets" }]]
+    }
+  }
+}
