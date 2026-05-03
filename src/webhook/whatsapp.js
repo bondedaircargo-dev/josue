@@ -1,30 +1,32 @@
 const express = require("express");
 const router = express.Router();
 const wa = require("../services/whatsapp");
-const claude = require("../services/claude");
+const { getSmartReply, detectClientType, CLIENT_TYPES } = require("../services/claude");
 const { sanitizeText } = require("../utils/helpers");
 const logger = require("../utils/logger");
 const templates = require("../templates/messages");
 
-// In-memory conversation history (replace with Redis/DB in production)
+// In-memory conversation history — replace with Redis in production
 const conversationHistory = new Map();
 
-// GET - Meta webhook verification
+// ─── GET /webhook — Meta verification handshake ───────────────────────────────
 router.get("/", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
-  if (mode === "subscribe" && token === process.env.WEBHOOK_VERIFY_TOKEN) {
-    logger.info("WhatsApp webhook verified by Meta");
+  if (mode === "subscribe" && token === process.env.VERIFY_TOKEN) {
+    logger.info("Webhook verified by Meta ✓");
     return res.status(200).send(challenge);
   }
+
+  logger.warn("Webhook verification failed — token mismatch");
   res.sendStatus(403);
 });
 
-// POST - Receive messages
+// ─── POST /webhook — Receive messages ────────────────────────────────────────
 router.post("/", async (req, res) => {
-  // Always respond 200 fast so Meta doesn't retry
+  // Always respond 200 immediately so Meta doesn't retry
   res.sendStatus(200);
 
   const body = req.body;
@@ -43,80 +45,94 @@ router.post("/", async (req, res) => {
   const msgType = message.type;
   const customerName = contact?.profile?.name || "Cliente";
 
-  logger.info(`Message received from ${from} (${customerName}): type=${msgType}`);
+  logger.info(`[${from}] ${customerName}: type=${msgType}`);
 
-  // Mark as read
-  try {
-    await wa.markAsRead(messageId);
-  } catch (_) {}
+  // Mark message as read
+  try { await wa.markAsRead(messageId); } catch (_) {}
 
+  // Extract text
   let incomingText = "";
   if (msgType === "text") {
     incomingText = message.text.body;
   } else if (msgType === "interactive") {
-    incomingText = message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || "";
+    incomingText =
+      message.interactive?.button_reply?.title ||
+      message.interactive?.list_reply?.title ||
+      "";
   } else {
-    await wa.sendText(from, `Hola ${customerName}! Recibimos tu ${msgType}. Por el momento solo procesamos mensajes de texto. ¿En qué podemos ayudarte?`);
+    await wa.sendText(
+      from,
+      `Hola ${customerName}! Por ahora solo proceso mensajes de texto. ¿En qué puedo ayudarte?`
+    );
     return;
   }
 
   const lower = sanitizeText(incomingText);
 
-  // Route by keyword first (fast path), fallback to Claude AI
-  const quickReply = getQuickReply(lower, customerName, from);
-
-  if (quickReply) {
-    try {
-      await wa.sendText(from, quickReply);
-    } catch (err) {
-      logger.error("Error sending quick reply", { error: err.message });
+  // ── Step 1: Quick keyword shortcuts (no API call, instant) ──────────────
+  const quick = getQuickReply(lower, customerName);
+  if (quick) {
+    try { await wa.sendText(from, quick); } catch (err) {
+      logger.error("sendText error", { error: err.message });
     }
     return;
   }
 
-  // Claude AI smart reply
-  if (process.env.ANTHROPIC_API_KEY) {
-    const history = conversationHistory.get(from) || [];
-    history.push({ role: "user", content: incomingText });
+  // ── Step 2: Claude AI with client-type routing ───────────────────────────
+  if (!process.env.ANTHROPIC_API_KEY) {
+    await wa.sendText(from, templates.defaultReply(customerName));
+    return;
+  }
 
-    try {
-      const reply = await claude.getSmartReply(incomingText, history);
-      history.push({ role: "assistant", content: reply });
-      // Keep last 10 turns
-      if (history.length > 20) history.splice(0, history.length - 20);
-      conversationHistory.set(from, history);
-      await wa.sendText(from, reply);
-    } catch (err) {
-      logger.error("Claude API error", { error: err.message });
-      await wa.sendText(from, templates.defaultReply(customerName));
-    }
-  } else {
+  const history = conversationHistory.get(from) || [];
+  history.push({ role: "user", content: incomingText });
+
+  try {
+    const { reply, clientType } = await getSmartReply(incomingText, history);
+
+    history.push({ role: "assistant", content: reply });
+    if (history.length > 20) history.splice(0, history.length - 20);
+    conversationHistory.set(from, history);
+
+    logger.info(`[${from}] Claude → type:${clientType}`);
+    await wa.sendText(from, reply);
+  } catch (err) {
+    logger.error("Claude API error", { error: err.message });
     await wa.sendText(from, templates.defaultReply(customerName));
   }
 });
 
-function getQuickReply(lower, name, phone) {
-  if (lower === "1" || lower.includes("rastrear") || lower.includes("tracking") || lower.includes("donde esta") || lower.includes("dónde está")) {
-    return templates.askForAWB(name);
-  }
-  if (lower === "2" || lower.includes("precio") || lower.includes("tarifa") || lower.includes("costo") || lower.includes("cuanto cuesta") || lower.includes("cuánto cuesta")) {
-    return templates.pricingInfo();
-  }
-  if (lower === "3" || lower.includes("tiempo") || lower.includes("cuanto tarda") || lower.includes("cuándo llega") || lower.includes("cuando llega")) {
-    return templates.deliveryTime();
-  }
-  if (lower === "4" || lower.includes("recoleccion") || lower.includes("recolección") || lower.includes("pickup") || lower.includes("buscar")) {
-    return templates.pickupInfo();
-  }
-  if (lower.includes("hola") || lower.includes("hello") || lower.includes("bonswa") || lower.includes("buenos dias") || lower.includes("buenas")) {
+// ─── Quick keyword replies (bypass Claude for common intents) ─────────────────
+function getQuickReply(lower, name) {
+  // Menu triggers
+  if (
+    lower === "hola" || lower === "hello" || lower === "hi" ||
+    lower === "bonswa" || lower === "buenos dias" || lower === "buenas" ||
+    lower === "buenos días" || lower === "menu" || lower === "menú" ||
+    lower === "start" || lower === "inicio"
+  ) {
     return templates.welcome(name);
   }
+
+  // Shortcut number buttons
+  if (lower === "1") return templates.askForAWB(name);
+  if (lower === "2") return templates.pricingInfo();
+  if (lower === "3") return templates.deliveryTime();
+  if (lower === "4") return templates.pickupInfo();
+
+  // Human agent
+  if (
+    lower.includes("agente") || lower.includes("humano") ||
+    lower.includes("persona") || lower.includes("hablar con")
+  ) {
+    return templates.transferToAgent(name);
+  }
+
+  // Thank you
   if (lower.includes("gracias") || lower.includes("mèsi") || lower.includes("thank")) {
     return templates.thankYou(name);
   }
-  if (lower.includes("hablar con") || lower.includes("agente") || lower.includes("humano") || lower.includes("persona")) {
-    return templates.transferToAgent(name);
-  }
+
   return null;
 }
 

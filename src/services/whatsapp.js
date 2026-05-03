@@ -1,7 +1,7 @@
 const axios = require("axios");
 const logger = require("../utils/logger");
 
-const BASE_URL = "https://graph.facebook.com/v19.0";
+const BASE_URL = "https://graph.facebook.com/v18.0";
 
 function getHeaders() {
   return {
@@ -11,7 +11,7 @@ function getHeaders() {
 }
 
 async function sendText(to, body) {
-  const url = `${BASE_URL}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const url = `${BASE_URL}/${process.env.PHONE_NUMBER_ID}/messages`;
   const payload = {
     messaging_product: "whatsapp",
     to,
@@ -24,7 +24,7 @@ async function sendText(to, body) {
 }
 
 async function sendTemplate(to, templateName, langCode = "es", components = []) {
-  const url = `${BASE_URL}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const url = `${BASE_URL}/${process.env.PHONE_NUMBER_ID}/messages`;
   const payload = {
     messaging_product: "whatsapp",
     to,
@@ -41,7 +41,7 @@ async function sendTemplate(to, templateName, langCode = "es", components = []) 
 }
 
 async function sendInteractive(to, body, buttons) {
-  const url = `${BASE_URL}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const url = `${BASE_URL}/${process.env.PHONE_NUMBER_ID}/messages`;
   const payload = {
     messaging_product: "whatsapp",
     to,
@@ -63,7 +63,7 @@ async function sendInteractive(to, body, buttons) {
 }
 
 async function sendDocument(to, documentUrl, caption, filename) {
-  const url = `${BASE_URL}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const url = `${BASE_URL}/${process.env.PHONE_NUMBER_ID}/messages`;
   const payload = {
     messaging_product: "whatsapp",
     to,
@@ -76,7 +76,7 @@ async function sendDocument(to, documentUrl, caption, filename) {
 }
 
 async function markAsRead(messageId) {
-  const url = `${BASE_URL}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const url = `${BASE_URL}/${process.env.PHONE_NUMBER_ID}/messages`;
   await axios.post(
     url,
     { messaging_product: "whatsapp", status: "read", message_id: messageId },
