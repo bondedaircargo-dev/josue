@@ -221,6 +221,154 @@ def run_full(
     show_stats()
 
 
+@app.command()
+def maps(
+    query: Optional[str] = typer.Option(None, "--query", "-q", help="Ej: 'courier service'"),
+    location: Optional[str] = typer.Option(None, "--location", "-loc", help="Ej: 'Miami, FL'"),
+    all_searches: bool = typer.Option(False, "--all", help="Ejecutar todas las busquedas predefinidas"),
+    max_results: int = typer.Option(100, "--max", "-m", help="Max resultados por busqueda"),
+    ai: bool = typer.Option(False, "--ai", help="AI enrichment para HOT leads"),
+):
+    """Extrae leads de Google Maps (mayor fuente gratuita). Requiere: playwright install chromium"""
+    from database import init_db, save_lead, url_exists
+    from google_maps import scrape_google_maps, scrape_all_maps_searches, MAPS_SEARCHES
+    from classifier import classify_lead
+    from ai_enrichment import enrich_lead
+
+    init_db()
+
+    if all_searches:
+        console.print(f"[bold cyan]Google Maps: {len(MAPS_SEARCHES)} busquedas predefinidas...[/]")
+        leads = scrape_all_maps_searches(max_per_search=max_results)
+    elif query and location:
+        console.print(f"[cyan]Google Maps: '{query}' en '{location}'[/]")
+        leads = scrape_google_maps(query, location, max_results=max_results)
+    else:
+        console.print("[yellow]Usa --query y --location, o --all para todas las busquedas.[/]")
+        console.print("\nEjemplos:")
+        console.print("  python main.py maps --query 'courier service' --location 'Miami, FL'")
+        console.print("  python main.py maps --all --max 50")
+        raise typer.Exit()
+
+    new_leads = 0
+    for lead in track(leads, description="Clasificando y guardando..."):
+        if url_exists(lead.source_url):
+            continue
+        lead = classify_lead(lead)
+        if ai and lead.classification in ("HOT", "WARM"):
+            lead = enrich_lead(lead)
+        if save_lead(lead):
+            new_leads += 1
+
+    console.print(f"\n[bold green]✓ {new_leads} leads nuevos de Google Maps.[/]")
+    from dashboard import show_stats
+    show_stats()
+
+
+@app.command()
+def dirs(
+    all_sources: bool = typer.Option(True, "--all/--no-all", help="Scrapear todos los directorios"),
+    pages: int = typer.Option(3, "--pages", "-p", help="Paginas por directorio"),
+    ai: bool = typer.Option(False, "--ai"),
+):
+    """Extrae leads de Yellow Pages, Yelp, Manta, Paginas Amarillas RD."""
+    from database import init_db, save_lead, url_exists
+    from directories import scrape_all_directories
+    from classifier import classify_lead
+    from ai_enrichment import enrich_lead
+
+    init_db()
+    console.print(f"[bold cyan]Scrapeando directorios (max {pages} paginas c/u)...[/]")
+
+    leads = scrape_all_directories(max_pages=pages)
+    new_leads = 0
+
+    for lead in track(leads, description="Clasificando y guardando..."):
+        if url_exists(lead.source_url):
+            continue
+        lead = classify_lead(lead)
+        if ai and lead.classification in ("HOT", "WARM"):
+            lead = enrich_lead(lead)
+        if save_lead(lead):
+            new_leads += 1
+
+    console.print(f"\n[bold green]✓ {new_leads} leads nuevos de directorios.[/]")
+    from dashboard import show_stats
+    show_stats()
+
+
+@app.command()
+def mega(
+    pages: int = typer.Option(5, "--pages", "-p", help="Paginas por directorio"),
+    maps_max: int = typer.Option(80, "--maps-max", help="Max resultados por busqueda en Maps"),
+    ai: bool = typer.Option(False, "--ai"),
+):
+    """MODO MEGA: Ejecuta Google Maps + todos los directorios + search. Meta: 10,000 leads."""
+    from database import init_db, save_lead, url_exists
+    from google_maps import scrape_all_maps_searches
+    from directories import scrape_all_directories
+    from search import search_keyword
+    from scraper import scrape_url
+    from classifier import classify_lead
+    from ai_enrichment import enrich_lead
+    from config import SEARCH_KEYWORDS
+    from dashboard import show_stats
+
+    init_db()
+    console.print("[bold magenta]🚀 MODO MEGA - Meta: 10,000 leads[/]")
+    console.print("[dim]Google Maps + Yellow Pages + Yelp + Manta + PA-RD + Web Search[/]\n")
+
+    all_leads = []
+    new_leads = 0
+
+    # 1. Google Maps
+    console.print("[bold cyan]Fase 1: Google Maps...[/]")
+    maps_leads = scrape_all_maps_searches(max_per_search=maps_max)
+    all_leads.extend(maps_leads)
+    console.print(f"  Google Maps: {len(maps_leads)} leads")
+
+    # 2. Directorios
+    console.print("[bold cyan]Fase 2: Directorios...[/]")
+    dir_leads = scrape_all_directories(max_pages=pages)
+    all_leads.extend(dir_leads)
+    console.print(f"  Directorios: {len(dir_leads)} leads")
+
+    # 3. Web search con todas las keywords
+    console.print("[bold cyan]Fase 3: Web Search...[/]")
+    web_urls = []
+    for kw in SEARCH_KEYWORDS:
+        web_urls.extend(search_keyword(kw))
+    web_urls = list(set(web_urls))
+    console.print(f"  URLs encontradas: {len(web_urls)}")
+    for url in web_urls:
+        if not url_exists(url):
+            lead = scrape_url(url)
+            if lead:
+                all_leads.append(lead)
+
+    # Clasificar y guardar todo
+    console.print(f"\n[bold]Clasificando {len(all_leads)} leads totales...[/]")
+    for lead in track(all_leads, description="Guardando en base de datos..."):
+        if url_exists(lead.source_url):
+            continue
+        lead = classify_lead(lead)
+        if ai and lead.classification in ("HOT", "WARM"):
+            lead = enrich_lead(lead)
+        if save_lead(lead):
+            new_leads += 1
+
+    console.print(f"\n[bold green]✓ MEGA completado: {new_leads} leads nuevos guardados.[/]")
+    show_stats()
+
+    # Auto-exportar
+    from export import export_csv
+    path_all = export_csv()
+    path_hot = export_csv(classification="HOT")
+    console.print(f"\n[green]CSVs exportados:[/]")
+    console.print(f"  Todos: {path_all}")
+    console.print(f"  HOT:   {path_hot}")
+
+
 def _save_urls_file(urls: list):
     import os
     os.makedirs("data", exist_ok=True)
