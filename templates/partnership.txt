@@ -1,0 +1,38 @@
+Hello {% if company_name and company_name != 'there' %}{{ company_name }}{% else %}there{% endif %},
+
+I'm {{ sender_name }} from Bonded Air Cargo in Miami, FL.
+
+I'm looking for reliable {{ company_type }} partners in {{ country if country else 'your region' }}
+to build a freight corridor into the Caribbean — specifically Dominican Republic and Haiti.
+
+Most of that import cargo moves through Miami. We have the infrastructure there.
+We need solid partners on the origin side.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WHAT WE OFFER PARTNERS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Weekly consolidated air & sea shipments Miami ↔ RD / Haiti
+• Licensed customs brokers on both ends
+• Warehousing + pick-pack in Miami
+• Real-time tracking for your clients
+• Competitive agent rates + revenue sharing
+• Dedicated account manager (English / Spanish / Creole)
+
+ACTIVE ROUTES:
+  China → Miami → DR / Haiti
+  Vietnam → Miami → DR / Haiti
+  USA (Miami) → DR (2–4 days air)
+  USA (Miami) → Haiti (2–4 days air)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Can we schedule a 15-min call this week? No commitment — just a conversation.
+
+Best regards,
+{{ sender_name }}
+Bonded Air Cargo — Miami, FL
+Email: info@bondedaircargo.com
+WhatsApp / Phone: +1 (305) 000-0000
+
+──
+To unsubscribe reply with "unsubscribe" in subject.

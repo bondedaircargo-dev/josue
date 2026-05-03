@@ -1,0 +1,34 @@
+Hello {% if company_name and company_name != 'there' %}{{ company_name }}{% else %}there{% endif %},
+
+My name is {{ sender_name }}, from Bonded Air Cargo (Miami, FL).
+
+I'm reaching out because we specialize in freight forwarding and logistics between
+{{ country if country else 'your region' }}, Miami, and the Dominican Republic / Haiti.
+
+────────────────────────────────────────────────
+WHY BONDED AIR CARGO?
+────────────────────────────────────────────────
+
+✈  Air Freight       — 2–4 day delivery Miami ↔ RD / Haiti
+🚢 Sea Freight       — LCL & FCL from China, Vietnam, USA
+📦 Warehousing       — Miami consolidation hub
+🛃 Customs           — Licensed brokers in DR & Haiti
+🔗 Last-Mile Delivery — Door-to-door in Santo Domingo & Port-au-Prince
+
+────────────────────────────────────────────────
+
+We run weekly consolidated shipments with competitive rates and NO minimum
+volume for new partners. Electronics, clothing, accessories — we handle it all.
+
+I'd love to send you a free rate sheet tailored to your cargo profile.
+
+Just reply to this email or WhatsApp me directly.
+
+Best regards,
+{{ sender_name }}
+Bonded Air Cargo — Miami, FL
+Email: info@bondedaircargo.com
+Phone: +1 (305) 000-0000
+
+──
+To unsubscribe, reply with "unsubscribe" in the subject line.

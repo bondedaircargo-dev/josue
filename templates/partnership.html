@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Partnership Opportunity — Bonded Air Cargo</title>
+  <style>
+    body { margin:0; padding:0; background:#f4f6f9; font-family: Arial, sans-serif; }
+    .wrapper { max-width:600px; margin:0 auto; background:#ffffff; }
+    .header  { background:#1a1a2e; padding:28px 32px; }
+    .header h1 { margin:0; color:#e0e0e0; font-size:22px; }
+    .header p  { margin:4px 0 0; color:#9090aa; font-size:13px; }
+    .body    { padding:32px; color:#2d2d2d; font-size:15px; line-height:1.75; }
+    .badge   { display:inline-block; background:#e8f4e8; color:#2a7a2a; padding:4px 10px;
+               border-radius:20px; font-size:12px; font-weight:bold; margin-bottom:16px; }
+    .box     { border:1px solid #e0e4ea; border-radius:8px; padding:20px; margin:24px 0; }
+    .box h3  { margin:0 0 12px; color:#1a1a2e; font-size:15px; }
+    .box ul  { margin:0; padding-left:20px; font-size:14px; color:#444; }
+    .box ul li { margin-bottom:6px; }
+    .routes  { display:flex; gap:12px; margin:20px 0; flex-wrap:wrap; }
+    .route   { flex:1; min-width:120px; background:#f7f9fc; border:1px solid #dce3ed;
+               border-radius:6px; padding:14px; text-align:center; font-size:13px; }
+    .route strong { display:block; color:#003087; font-size:15px; margin-bottom:4px; }
+    .cta     { text-align:center; margin:28px 0; }
+    .cta a   { background:#1a1a2e; color:#fff; padding:14px 32px; border-radius:6px;
+               text-decoration:none; font-weight:bold; font-size:15px; display:inline-block; }
+    .footer  { background:#f0f2f5; padding:18px 32px; font-size:12px; color:#888;
+               border-top:1px solid #e0e4ea; text-align:center; }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <div class="header">
+    <h1>Bonded Air Cargo</h1>
+    <p>International Freight Partner | Miami, FL</p>
+  </div>
+
+  <div class="body">
+    <span class="badge">Partnership Proposal</span>
+
+    <p>
+      Hello{% if company_name and company_name != 'there' %} <strong>{{ company_name }}</strong>{% else %}{% endif %},
+    </p>
+
+    <p>
+      I'm {{ sender_name }} from <strong>Bonded Air Cargo</strong> in Miami. We are looking for
+      reliable {{ company_type }} partners in <strong>{{ country if country else 'your region' }}</strong>
+      to build a long-term freight corridor into the Caribbean market.
+    </p>
+
+    <p>
+      The Dominican Republic and Haiti together represent a growing import market —
+      and most of that cargo moves through <strong>Miami</strong>. We already have the
+      infrastructure. We need the right partners on the origin side.
+    </p>
+
+    <div class="box">
+      <h3>🤝 What we bring to the partnership</h3>
+      <ul>
+        <li>Weekly consolidated air & sea shipments Miami ↔ RD / Haiti</li>
+        <li>Licensed customs brokers on both ends</li>
+        <li>Warehousing & pick-pack in Miami (33166 zip code)</li>
+        <li>Real-time cargo tracking for your clients</li>
+        <li>Competitive agent rates + revenue sharing</li>
+        <li>Dedicated account manager (English / Spanish / Haitian Creole)</li>
+      </ul>
+    </div>
+
+    <div class="box">
+      <h3>📦 What we're looking for</h3>
+      <ul>
+        <li>{{ company_type | title }} with active clients shipping to the Caribbean</li>
+        <li>Freight volume: 100kg+ per month (no hard minimum to start)</li>
+        <li>Interest in co-marketing to joint client base</li>
+      </ul>
+    </div>
+
+    <p><strong>Our main active routes:</strong></p>
+    <div class="routes">
+      <div class="route"><strong>China → Miami</strong>Sea / Air</div>
+      <div class="route"><strong>Miami → DR</strong>Air 2–4 days</div>
+      <div class="route"><strong>Miami → Haiti</strong>Air 2–4 days</div>
+      <div class="route"><strong>Vietnam → Miami</strong>Sea / Air</div>
+    </div>
+
+    <p>
+      I'd love to schedule a 15-minute call this week to explore whether there's a fit.
+      No commitment, just a conversation.
+    </p>
+
+    <div class="cta">
+      <a href="mailto:info@bondedaircargo.com?subject=Partnership%20Interest%20-%20{{ company_name | urlencode }}">
+        Yes, Let's Talk →
+      </a>
+    </div>
+
+    <p>
+      Looking forward to hearing from you,<br />
+      <strong>{{ sender_name }}</strong><br />
+      <em>Bonded Air Cargo | Miami, FL</em><br />
+      📧 info@bondedaircargo.com | 📱 +1 (305) 000-0000
+    </p>
+  </div>
+
+  <div class="footer">
+    Bonded Air Cargo | Miami, FL 33166 ·
+    <a href="mailto:info@bondedaircargo.com">Unsubscribe</a>
+  </div>
+
+</div>
+</body>
+</html>

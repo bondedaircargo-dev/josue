@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Freight & Logistics — Bonded Air Cargo</title>
+  <style>
+    body { margin:0; padding:0; background:#f4f6f9; font-family: Arial, sans-serif; }
+    .wrapper { max-width:600px; margin:0 auto; background:#ffffff; }
+    .header  { background:#003087; padding:28px 32px; }
+    .header h1 { margin:0; color:#ffffff; font-size:22px; letter-spacing:.5px; }
+    .header p  { margin:4px 0 0; color:#a8c4e8; font-size:13px; }
+    .body    { padding:32px 32px 24px; color:#2d2d2d; font-size:15px; line-height:1.7; }
+    .body h2 { color:#003087; font-size:17px; margin-top:28px; }
+    .highlight { background:#f0f4ff; border-left:4px solid #003087; padding:14px 18px;
+                 border-radius:4px; margin:20px 0; font-size:14px; }
+    .services { width:100%; border-collapse:collapse; margin:20px 0; font-size:14px; }
+    .services th { background:#003087; color:#fff; padding:10px 14px; text-align:left; }
+    .services td { padding:10px 14px; border-bottom:1px solid #e8ecf1; }
+    .services tr:nth-child(even) td { background:#f7f9fc; }
+    .cta { text-align:center; margin:28px 0; }
+    .cta a { background:#e8a020; color:#fff; padding:14px 32px; border-radius:6px;
+             text-decoration:none; font-weight:bold; font-size:15px; display:inline-block; }
+    .footer { background:#f0f2f5; padding:18px 32px; font-size:12px; color:#888;
+              border-top:1px solid #e0e4ea; text-align:center; }
+    .footer a { color:#003087; text-decoration:none; }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>Bonded Air Cargo</h1>
+    <p>International Freight & Logistics | Miami, FL</p>
+  </div>
+
+  <!-- Body -->
+  <div class="body">
+    <p>Hello{% if company_name and company_name != 'there' %} <strong>{{ company_name }}</strong>{% else %} there{% endif %},</p>
+
+    <p>
+      My name is <strong>{{ sender_name }}</strong>. I'm reaching out because we specialize in
+      freight forwarding and logistics between
+      <strong>{{ country if country else 'your region' }}</strong>,
+      <strong>Miami, FL</strong>, and the
+      <strong>Dominican Republic / Haiti</strong> — two of the fastest-growing import markets
+      in the Caribbean.
+    </p>
+
+    <div class="highlight">
+      We move cargo weekly between <strong>Miami ↔ Santo Domingo ↔ Port-au-Prince</strong>
+      — air and sea freight, door-to-door, with full customs handling.
+    </div>
+
+    <h2>Why work with Bonded Air Cargo?</h2>
+
+    <table class="services">
+      <tr>
+        <th>Service</th>
+        <th>Details</th>
+      </tr>
+      <tr>
+        <td>✈️ Air Freight</td>
+        <td>2–4 day delivery Miami → RD / Haiti</td>
+      </tr>
+      <tr>
+        <td>🚢 Sea Freight</td>
+        <td>LCL & FCL — competitive rates from China, Vietnam, USA</td>
+      </tr>
+      <tr>
+        <td>📦 Warehousing</td>
+        <td>Miami consolidation hub — pick, pack & ship</td>
+      </tr>
+      <tr>
+        <td>🛃 Customs Clearance</td>
+        <td>Licensed customs brokers in DR & Haiti</td>
+      </tr>
+      <tr>
+        <td>🔗 Last-Mile</td>
+        <td>Door-to-door delivery in Santo Domingo & Port-au-Prince</td>
+      </tr>
+    </table>
+
+    <p>
+      Whether you're shipping electronics, clothing, accessories, or general cargo,
+      we can handle the full chain — from your warehouse to the final consignee.
+    </p>
+
+    <h2>Let's talk numbers</h2>
+    <p>
+      We offer <strong>competitive rates</strong> and weekly consolidated shipments
+      with no minimum volume requirements for new partners.
+      I'd love to send you a free rate sheet tailored to your typical cargo.
+    </p>
+
+    <div class="cta">
+      <a href="mailto:{{ sender_name | lower | replace(' ', '') }}@bondedaircargo.com?subject=Rate%20Request">
+        Request a Free Rate Sheet →
+      </a>
+    </div>
+
+    <p>
+      Feel free to reply directly to this email or WhatsApp us.
+      I'm happy to jump on a quick call at your convenience.
+    </p>
+
+    <p>
+      Best regards,<br />
+      <strong>{{ sender_name }}</strong><br />
+      <em>Bonded Air Cargo — Miami, FL</em><br />
+      📧 info@bondedaircargo.com<br />
+      📱 +1 (305) 000-0000
+    </p>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>
+      Bonded Air Cargo | Miami, FL 33166<br />
+      <a href="mailto:info@bondedaircargo.com">Unsubscribe</a> · You received this because you
+      operate in international freight/logistics.
+    </p>
+  </div>
+
+</div>
+</body>
+</html>

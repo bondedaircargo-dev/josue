@@ -1,0 +1,24 @@
+Hi {% if company_name and company_name != 'there' %}{{ company_name }}{% endif %},
+
+Quick intro — I run freight logistics between Miami and the Dominican Republic / Haiti.
+
+We ship weekly, handle customs, and offer door-to-door delivery.
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+✈  Air freight — 2–4 days Miami → RD / Haiti
+🚢 Sea freight — LCL / FCL, competitive rates
+📦 Miami warehouse & consolidation
+🛃 Customs clearance included
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+If you or any of your clients ship to the Caribbean, let's connect.
+
+Just reply to this email — happy to chat or send a rate sheet.
+
+— {{ sender_name }}
+Bonded Air Cargo | Miami, FL
+WhatsApp: +1 (305) 000-0000
+Email: info@bondedaircargo.com
+
+──
+To unsubscribe reply with "unsubscribe".

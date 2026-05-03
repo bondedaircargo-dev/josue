@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Quick Intro — Bonded Air Cargo</title>
+  <style>
+    body { margin:0; padding:0; background:#f9f9f9; font-family: Arial, sans-serif; }
+    .wrapper { max-width:560px; margin:0 auto; background:#ffffff;
+               border-radius:8px; overflow:hidden; margin-top:20px; }
+    .top     { background:#003087; padding:20px 28px; }
+    .top h1  { margin:0; color:#fff; font-size:18px; font-weight:600; }
+    .body    { padding:28px; color:#333; font-size:15px; line-height:1.75; }
+    .pill    { display:inline-block; background:#fff3e0; color:#b35c00; padding:3px 10px;
+               border-radius:20px; font-size:12px; font-weight:bold; margin:4px 2px; }
+    .mini-list { font-size:14px; padding-left:0; list-style:none; margin:16px 0; }
+    .mini-list li { padding:5px 0; border-bottom:1px solid #f0f0f0; }
+    .mini-list li:last-child { border-bottom:none; }
+    .cta     { background:#003087; color:#fff; padding:12px 26px; border-radius:6px;
+               text-decoration:none; font-size:14px; font-weight:bold; display:inline-block;
+               margin-top:8px; }
+    .footer  { padding:16px 28px; font-size:11px; color:#aaa; border-top:1px solid #eee;
+               text-align:center; }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <div class="top">
+    <h1>Bonded Air Cargo · Miami → Caribbean</h1>
+  </div>
+
+  <div class="body">
+    <p>
+      Hi{% if company_name and company_name != 'there' %} <strong>{{ company_name }}</strong>{% endif %} 👋
+    </p>
+
+    <p>
+      Quick intro — I run freight logistics between <strong>Miami</strong> and the
+      <strong>Dominican Republic / Haiti</strong>. We ship weekly, handle customs,
+      and offer door-to-door.
+    </p>
+
+    <p><strong>We work with:</strong></p>
+    <span class="pill">Freight Forwarders</span>
+    <span class="pill">Warehouses</span>
+    <span class="pill">Exporters</span>
+    <span class="pill">Suppliers</span>
+    <span class="pill">E-commerce</span>
+
+    <ul class="mini-list">
+      <li>✈️  Air freight: <strong>2–4 days Miami → RD / Haiti</strong></li>
+      <li>🚢  Sea freight: LCL / FCL, competitive rates</li>
+      <li>📦  Miami warehouse & consolidation</li>
+      <li>🛃  Customs clearance included</li>
+    </ul>
+
+    <p>
+      If you or any of your clients ship to the Caribbean, let's connect.
+      Even one route can be the start of a great working relationship.
+    </p>
+
+    <a class="cta" href="mailto:info@bondedaircargo.com?subject=Interested%20in%20your%20services">
+      Reply to this email →
+    </a>
+
+    <p style="margin-top:24px; font-size:14px;">
+      — <strong>{{ sender_name }}</strong><br />
+      Bonded Air Cargo | Miami, FL<br />
+      📱 WhatsApp: +1 (305) 000-0000
+    </p>
+  </div>
+
+  <div class="footer">
+    Bonded Air Cargo · Miami, FL 33166 ·
+    <a href="mailto:info@bondedaircargo.com" style="color:#aaa;">Unsubscribe</a>
+  </div>
+
+</div>
+</body>
+</html>
