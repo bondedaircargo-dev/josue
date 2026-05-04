@@ -1,47 +1,60 @@
 const axios = require("axios");
 const logger = require("../utils/logger");
 
-const BASE_URL = "https://graph.facebook.com/v18.0";
+const BASE_URL = "https://graph.facebook.com/v19.0";
 
-function getHeaders() {
+// ─── Per-company helpers ──────────────────────────────────────────────────────
+
+function getConfig(company = null) {
   return {
-    Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+    token: company?.waToken || process.env.WHATSAPP_TOKEN,
+    phoneId: company?.phoneNumberId || process.env.PHONE_NUMBER_ID,
+  };
+}
+
+function headers(token) {
+  return {
+    Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
   };
 }
 
-async function sendText(to, body) {
-  const url = `${BASE_URL}/${process.env.PHONE_NUMBER_ID}/messages`;
+// ─── Core send functions (with optional company context) ─────────────────────
+
+async function sendText(to, body, company = null) {
+  const { token, phoneId } = getConfig(company);
+  const url = `${BASE_URL}/${phoneId}/messages`;
   const payload = {
     messaging_product: "whatsapp",
     to,
     type: "text",
     text: { body },
   };
-  const res = await axios.post(url, payload, { headers: getHeaders() });
-  logger.info(`WhatsApp text sent to ${to}`);
+  const res = await axios.post(url, payload, { headers: headers(token) });
+  logger.info(`[${company?.id || "default"}] Text sent to ${to}`);
   return res.data;
 }
 
-async function sendTemplate(to, templateName, langCode = "es", components = []) {
-  const url = `${BASE_URL}/${process.env.PHONE_NUMBER_ID}/messages`;
+// Alias used in webhook for clarity
+const sendTextForCompany = sendText;
+
+async function sendTemplate(to, templateName, langCode = "es", components = [], company = null) {
+  const { token, phoneId } = getConfig(company);
+  const url = `${BASE_URL}/${phoneId}/messages`;
   const payload = {
     messaging_product: "whatsapp",
     to,
     type: "template",
-    template: {
-      name: templateName,
-      language: { code: langCode },
-      components,
-    },
+    template: { name: templateName, language: { code: langCode }, components },
   };
-  const res = await axios.post(url, payload, { headers: getHeaders() });
-  logger.info(`WhatsApp template "${templateName}" sent to ${to}`);
+  const res = await axios.post(url, payload, { headers: headers(token) });
+  logger.info(`[${company?.id || "default"}] Template "${templateName}" sent to ${to}`);
   return res.data;
 }
 
-async function sendInteractive(to, body, buttons) {
-  const url = `${BASE_URL}/${process.env.PHONE_NUMBER_ID}/messages`;
+async function sendInteractive(to, body, buttons, company = null) {
+  const { token, phoneId } = getConfig(company);
+  const url = `${BASE_URL}/${phoneId}/messages`;
   const payload = {
     messaging_product: "whatsapp",
     to,
@@ -57,31 +70,44 @@ async function sendInteractive(to, body, buttons) {
       },
     },
   };
-  const res = await axios.post(url, payload, { headers: getHeaders() });
-  logger.info(`WhatsApp interactive message sent to ${to}`);
+  const res = await axios.post(url, payload, { headers: headers(token) });
+  logger.info(`[${company?.id || "default"}] Interactive sent to ${to}`);
   return res.data;
 }
 
-async function sendDocument(to, documentUrl, caption, filename) {
-  const url = `${BASE_URL}/${process.env.PHONE_NUMBER_ID}/messages`;
+async function sendDocument(to, documentUrl, caption, filename, company = null) {
+  const { token, phoneId } = getConfig(company);
+  const url = `${BASE_URL}/${phoneId}/messages`;
   const payload = {
     messaging_product: "whatsapp",
     to,
     type: "document",
     document: { link: documentUrl, caption, filename },
   };
-  const res = await axios.post(url, payload, { headers: getHeaders() });
-  logger.info(`WhatsApp document sent to ${to}: ${filename}`);
+  const res = await axios.post(url, payload, { headers: headers(token) });
+  logger.info(`[${company?.id || "default"}] Document sent to ${to}: ${filename}`);
   return res.data;
 }
 
-async function markAsRead(messageId) {
-  const url = `${BASE_URL}/${process.env.PHONE_NUMBER_ID}/messages`;
+async function markAsRead(messageId, company = null) {
+  const { token, phoneId } = getConfig(company);
+  const url = `${BASE_URL}/${phoneId}/messages`;
   await axios.post(
     url,
     { messaging_product: "whatsapp", status: "read", message_id: messageId },
-    { headers: getHeaders() }
+    { headers: headers(token) }
   );
 }
 
-module.exports = { sendText, sendTemplate, sendInteractive, sendDocument, markAsRead };
+// Alias for webhook
+const markAsReadForCompany = markAsRead;
+
+module.exports = {
+  sendText,
+  sendTextForCompany,
+  sendTemplate,
+  sendInteractive,
+  sendDocument,
+  markAsRead,
+  markAsReadForCompany,
+};

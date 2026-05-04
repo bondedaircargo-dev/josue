@@ -1,6 +1,6 @@
 {
-  "name": "Shipment Status Auto-Alert",
-  "description": "Triggered by webhook when shipment status changes, sends WhatsApp + Email notifications",
+  "name": "Shipment Status Auto-Alert (CRN)",
+  "description": "Triggered when shipment status changes. Sends WhatsApp + Email + updates Google Sheets. Supports all 7 statuses and multi-company.",
   "nodes": [
     {
       "id": "status-webhook",
@@ -8,29 +8,73 @@
       "type": "n8n-nodes-base.webhook",
       "parameters": {
         "path": "status-update",
-        "method": "POST"
+        "method": "POST",
+        "responseMode": "responseNode"
       },
-      "position": [250, 300]
+      "position": [200, 300]
     },
     {
-      "id": "send-whatsapp-update",
+      "id": "respond-200",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "responseCode": 200
+      },
+      "position": [400, 150]
+    },
+    {
+      "id": "validate-payload",
+      "name": "Validate & Enrich Payload",
+      "type": "n8n-nodes-base.code",
+      "parameters": {
+        "jsCode": "const data = items[0].json;\nconst statusEmoji = { RECIBIDO: '📦', ALMACEN: '🏭', EN_TRANSITO: '✈️', EN_ADUANA: '🛃', DISPONIBLE: '📍', ENTREGADO: '✅', RETENIDO: '⚠️' };\nconst statusMsg = { RECIBIDO: 'Tu paquete fue recibido en Miami.', ALMACEN: 'Tu paquete está en almacén listo para vuelo.', EN_TRANSITO: 'Tu paquete está en camino. Vuelo confirmado.', EN_ADUANA: 'Tu paquete está en aduana en destino.', DISPONIBLE: 'Tu paquete llegó al destino, listo para entrega.', ENTREGADO: 'Tu paquete fue entregado exitosamente.', RETENIDO: '⚠️ Tu paquete fue retenido en aduana. Contacta al agente urgente.' };\nreturn [{ json: { ...data, emoji: statusEmoji[data.status] || '📦', statusMsg: statusMsg[data.status] || 'Estado actualizado.', company: data.company || 'MCP', ref: data.crn || data.awb || 'N/A' } }];"
+      },
+      "position": [400, 350]
+    },
+    {
+      "id": "check-has-phone",
+      "name": "Has Phone?",
+      "type": "n8n-nodes-base.if",
+      "parameters": {
+        "conditions": {
+          "string": [{ "value1": "={{$json.customerPhone}}", "operation": "isNotEmpty" }]
+        }
+      },
+      "position": [600, 350]
+    },
+    {
+      "id": "send-whatsapp",
       "name": "Send WhatsApp Notification",
       "type": "n8n-nodes-base.httpRequest",
       "parameters": {
         "method": "POST",
-        "url": "=https://graph.facebook.com/v19.0/{{$env.WHATSAPP_PHONE_NUMBER_ID}}/messages",
+        "url": "=https://graph.facebook.com/v19.0/{{$env.PHONE_NUMBER_ID}}/messages",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpBearerAuth",
-        "body": {
-          "messaging_product": "whatsapp",
-          "to": "={{$json.customerPhone}}",
-          "type": "text",
-          "text": {
-            "body": "=✈️ Bonded Air Cargo\n\nHola {{$json.customerName}}, tu paquete AWB {{$json.awb}} cambió de estado:\n\n→ {{$json.status}}\n\n{{$json.note || 'Para más info escríbenos.'}}'"
-          }
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "messaging_product", "value": "whatsapp" },
+            { "name": "to", "value": "={{$json.customerPhone}}" },
+            { "name": "type", "value": "text" }
+          ]
+        },
+        "jsonBody": "={\"messaging_product\":\"whatsapp\",\"to\":\"{{$json.customerPhone}}\",\"type\":\"text\",\"text\":{\"body\":\"{{$json.emoji}} *{{$json.company}}*\\n\\nHola {{$json.customerName}},\\n\\nTu envío *{{$json.ref}}* cambió de estado:\\n*→ {{$json.status}}*\\n\\n{{$json.note || $json.statusMsg}}\"}}"
+      },
+      "position": [850, 250]
+    },
+    {
+      "id": "check-has-email",
+      "name": "Has Email?",
+      "type": "n8n-nodes-base.if",
+      "parameters": {
+        "conditions": {
+          "string": [{ "value1": "={{$json.customerEmail}}", "operation": "isNotEmpty" }]
         }
       },
-      "position": [500, 200]
+      "position": [850, 400]
     },
     {
       "id": "send-email",
@@ -38,14 +82,15 @@
       "type": "n8n-nodes-base.emailSend",
       "parameters": {
         "toEmail": "={{$json.customerEmail}}",
-        "subject": "=Actualización AWB {{$json.awb}} - Bonded Air Cargo",
-        "text": "=Tu paquete {{$json.awb}} cambió de estado: {{$json.status}}. Destino: {{$json.destination}}."
+        "subject": "={{$json.emoji}} Actualización CRN {{$json.ref}} — {{$json.company}}",
+        "emailFormat": "html",
+        "html": "=<div style='font-family:Arial;max-width:600px'><h2>{{$json.company}} — Actualización de Envío</h2><p>Hola <strong>{{$json.customerName}}</strong>,</p><p>Tu envío <strong>{{$json.ref}}</strong> cambió de estado:</p><h3>{{$json.emoji}} {{$json.status}}</h3><p>{{$json.statusMsg}}</p>{{$json.note ? '<p><em>Nota: '+$json.note+'</em></p>' : ''}}<p style='color:#666;font-size:12px'>{{$json.company}} — Miami ✈️ RD/Haití</p></div>"
       },
-      "position": [500, 400]
+      "position": [1050, 400]
     },
     {
-      "id": "update-sheets",
-      "name": "Update Shipment in Sheets",
+      "id": "log-status-sheets",
+      "name": "Log to Google Sheets",
       "type": "n8n-nodes-base.googleSheets",
       "parameters": {
         "operation": "append",
@@ -55,19 +100,30 @@
           "mappingMode": "defineBelow",
           "value": {
             "timestamp": "={{new Date().toISOString()}}",
-            "awb": "={{$json.awb}}",
+            "crn": "={{$json.ref}}",
+            "company": "={{$json.company}}",
             "status": "={{$json.status}}",
-            "note": "={{$json.note}}",
-            "customer": "={{$json.customerName}}"
+            "note": "={{$json.note || ''}}",
+            "customer": "={{$json.customerName}}",
+            "phone": "={{$json.customerPhone}}"
           }
         }
       },
-      "position": [500, 550]
+      "position": [1050, 550]
     }
   ],
   "connections": {
     "status-webhook": {
-      "main": [[{ "node": "send-whatsapp-update" }, { "node": "send-email" }, { "node": "update-sheets" }]]
+      "main": [[{ "node": "respond-200" }, { "node": "validate-payload" }]]
+    },
+    "validate-payload": {
+      "main": [[{ "node": "check-has-phone" }, { "node": "log-status-sheets" }]]
+    },
+    "check-has-phone": {
+      "main": [[{ "node": "send-whatsapp" }], [{ "node": "check-has-email" }]]
+    },
+    "check-has-email": {
+      "main": [[{ "node": "send-email" }], []]
     }
   }
 }

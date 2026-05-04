@@ -4,113 +4,179 @@ const wa = require("../services/whatsapp");
 const gmail = require("../services/gmail");
 const sheets = require("../services/sheets");
 const pdf = require("../services/pdf");
-const { generateAWB } = require("../utils/helpers");
+const { getCompanyById } = require("../config/companies");
+const { generateAWB, generateCRN } = require("../utils/helpers");
 const logger = require("../utils/logger");
 const templates = require("../templates/messages");
 
-// In-memory store (replace with database in production)
+// In-memory store — replace with DB in production
 const shipments = new Map();
 
-// GET /tracking/:awb - Query tracking status
-router.get("/:awb", (req, res) => {
-  const { awb } = req.params;
-  const shipment = shipments.get(awb);
-  if (!shipment) return res.status(404).json({ error: "AWB no encontrado" });
-  res.json(shipment);
-});
+const VALID_STATUSES = [
+  "RECIBIDO",
+  "ALMACEN",
+  "EN_TRANSITO",
+  "EN_ADUANA",
+  "DISPONIBLE",
+  "ENTREGADO",
+  "RETENIDO",
+];
 
-// GET /tracking - List all shipments
+// ─── GET /tracking — List all shipments ──────────────────────────────────────
 router.get("/", (req, res) => {
-  const list = Array.from(shipments.values());
+  const { status, company, destination } = req.query;
+  let list = Array.from(shipments.values());
+
+  if (status) list = list.filter((s) => s.status === status.toUpperCase());
+  if (company) list = list.filter((s) => s.company === company.toUpperCase());
+  if (destination) {
+    const d = destination.toLowerCase();
+    list = list.filter((s) => s.destination?.toLowerCase().includes(d));
+  }
+
   res.json({ total: list.length, shipments: list });
 });
 
-// POST /tracking - Create new shipment
-router.post("/", async (req, res) => {
-  const {
-    customerName, customerPhone, customerEmail,
-    destination, weight, pieces, description,
-    value, notes, flightDate, flightNumber,
-  } = req.body;
+// ─── GET /tracking/:ref — Query by CRN or AWB ────────────────────────────────
+router.get("/:ref", (req, res) => {
+  const ref = req.params.ref.toUpperCase();
 
-  if (!customerName || !customerPhone || !destination || !weight) {
-    return res.status(400).json({ error: "Campos requeridos: customerName, customerPhone, destination, weight" });
+  // Search by CRN first, then AWB
+  let shipment = shipments.get(ref);
+  if (!shipment) {
+    shipment = Array.from(shipments.values()).find((s) => s.awb === ref);
   }
 
-  const awb = generateAWB("BAC");
-  const shipment = {
-    awb,
+  if (!shipment) return res.status(404).json({ error: "Envío no encontrado" });
+  res.json(shipment);
+});
+
+// ─── POST /tracking — Create new shipment ────────────────────────────────────
+router.post("/", async (req, res) => {
+  const {
     customerName,
     customerPhone,
     customerEmail,
     destination,
+    weight,
+    pieces,
+    description,
+    value,
+    notes,
+    flightDate,
+    flightNumber,
+    company: companyId,
+    shipperName,
+    customerAddress,
+    destinationAirport,
+  } = req.body;
+
+  if (!customerName || !customerPhone || !destination || !weight) {
+    return res.status(400).json({
+      error: "Campos requeridos: customerName, customerPhone, destination, weight",
+    });
+  }
+
+  const company = getCompanyById(companyId);
+  const awb = generateAWB(company.id);
+  const crn = generateCRN(company.id, "SHP");
+
+  const shipment = {
+    crn,
+    awb,
+    company: company.id,
+    customerName,
+    customerPhone,
+    customerEmail: customerEmail || null,
+    customerAddress: customerAddress || null,
+    shipperName: shipperName || company.fullName,
+    destination,
+    destinationAirport: destinationAirport || null,
     weight: parseFloat(weight),
     pieces: parseInt(pieces) || 1,
     description: description || "General cargo",
     value: parseFloat(value) || 0,
-    notes,
-    flightDate,
-    flightNumber,
+    notes: notes || null,
+    flightDate: flightDate || null,
+    flightNumber: flightNumber || null,
     status: "RECIBIDO",
-    statusHistory: [{ status: "RECIBIDO", date: new Date().toISOString(), note: "Envío registrado" }],
+    statusHistory: [
+      { status: "RECIBIDO", date: new Date().toISOString(), note: "Envío registrado" },
+    ],
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 
-  shipments.set(awb, shipment);
-  logger.info(`Shipment created: ${awb}`);
+  // Index by CRN (primary) and AWB (secondary)
+  shipments.set(crn, shipment);
+  logger.info(`Shipment created: ${crn} / ${awb}`);
 
-  // Notify customer via WhatsApp
+  // WhatsApp notification
   try {
-    const msg = templates.shipmentCreated(customerName, awb, destination, weight);
-    await wa.sendText(customerPhone, msg);
+    const msg = templates.shipmentCreated(
+      customerName,
+      crn,
+      awb,
+      destination,
+      weight,
+      company
+    );
+    await wa.sendText(customerPhone, msg, company);
   } catch (err) {
     logger.warn("WhatsApp notification failed", { error: err.message });
   }
 
-  // Log to Google Sheets
+  // Google Sheets log
   try {
-    await sheets.logShipment(shipment);
+    await sheets.logShipment({ ...shipment, invoiceNumber: "" });
   } catch (err) {
     logger.warn("Sheets log failed", { error: err.message });
   }
 
-  res.status(201).json({ success: true, awb, shipment });
+  res.status(201).json({ success: true, crn, awb, shipment });
 });
 
-// PATCH /tracking/:awb/status - Update status
-router.patch("/:awb/status", async (req, res) => {
-  const { awb } = req.params;
+// ─── PATCH /tracking/:ref/status — Update shipment status ────────────────────
+router.patch("/:ref/status", async (req, res) => {
+  const ref = req.params.ref.toUpperCase();
+  const shipment = shipments.get(ref) || Array.from(shipments.values()).find((s) => s.awb === ref);
+
+  if (!shipment) return res.status(404).json({ error: "Envío no encontrado" });
+
   const { status, note } = req.body;
-
-  const shipment = shipments.get(awb);
-  if (!shipment) return res.status(404).json({ error: "AWB no encontrado" });
-
-  const validStatuses = ["RECIBIDO", "EN_TRANSITO", "EN_ADUANA", "EN_DESTINO", "ENTREGADO", "RETENIDO"];
-  if (!validStatuses.includes(status)) {
-    return res.status(400).json({ error: `Estado inválido. Válidos: ${validStatuses.join(", ")}` });
+  if (!VALID_STATUSES.includes(status)) {
+    return res.status(400).json({ error: `Estados válidos: ${VALID_STATUSES.join(", ")}` });
   }
 
   shipment.status = status;
   shipment.statusHistory.push({ status, date: new Date().toISOString(), note: note || "" });
   shipment.updatedAt = new Date().toISOString();
-  shipments.set(awb, shipment);
+  shipments.set(shipment.crn, shipment);
 
-  logger.info(`Shipment ${awb} status updated to ${status}`);
+  logger.info(`Shipment ${shipment.crn} → ${status}`);
 
-  // Notify customer
+  const company = getCompanyById(shipment.company);
+
+  // WhatsApp notification
   try {
-    const msg = templates.statusUpdate(shipment.customerName, awb, status, note);
-    await wa.sendText(shipment.customerPhone, msg);
+    const msg = templates.statusUpdate(
+      shipment.customerName,
+      shipment.crn,
+      status,
+      note,
+      company
+    );
+    await wa.sendText(shipment.customerPhone, msg, company);
   } catch (err) {
     logger.warn("WhatsApp status notification failed", { error: err.message });
   }
 
-  // Send email if available
+  // Email notification
   if (shipment.customerEmail) {
     try {
       await gmail.sendTrackingEmail(
         { name: shipment.customerName, email: shipment.customerEmail },
-        shipment
+        { ...shipment, awb: shipment.crn }
       );
     } catch (err) {
       logger.warn("Email notification failed", { error: err.message });
@@ -120,26 +186,27 @@ router.patch("/:awb/status", async (req, res) => {
   res.json({ success: true, shipment });
 });
 
-// GET /tracking/:awb/prealert - Download pre-alert PDF
-router.get("/:awb/prealert", async (req, res) => {
-  const { awb } = req.params;
-  const shipment = shipments.get(awb);
-  if (!shipment) return res.status(404).json({ error: "AWB no encontrado" });
+// ─── GET /tracking/:ref/prealert — Pre-alert PDF ─────────────────────────────
+router.get("/:ref/prealert", async (req, res) => {
+  const ref = req.params.ref.toUpperCase();
+  const shipment = shipments.get(ref) || Array.from(shipments.values()).find((s) => s.awb === ref);
+
+  if (!shipment) return res.status(404).json({ error: "Envío no encontrado" });
 
   try {
     const pdfBuffer = await pdf.generatePreAlert(shipment);
     res.set({
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="prealert-${awb}.pdf"`,
+      "Content-Disposition": `attachment; filename="prealert-${shipment.crn}.pdf"`,
     });
     res.send(pdfBuffer);
   } catch (err) {
-    logger.error("Pre-alert PDF generation failed", { error: err.message });
+    logger.error("Pre-alert PDF failed", { error: err.message });
     res.status(500).json({ error: "Error generando PDF" });
   }
 });
 
-// GET /tracking/report/pdf - Download AWB report
+// ─── GET /tracking/report/pdf — AWB report PDF ───────────────────────────────
 router.get("/report/pdf", async (req, res) => {
   try {
     const list = Array.from(shipments.values()).map((s) => ({
@@ -149,13 +216,14 @@ router.get("/report/pdf", async (req, res) => {
     const pdfBuffer = await pdf.generateAWBReport(list);
     res.set({
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="awb-report-${Date.now()}.pdf"`,
+      "Content-Disposition": `attachment; filename="shipment-report-${Date.now()}.pdf"`,
     });
     res.send(pdfBuffer);
   } catch (err) {
-    logger.error("AWB report PDF generation failed", { error: err.message });
+    logger.error("AWB report PDF failed", { error: err.message });
     res.status(500).json({ error: "Error generando reporte" });
   }
 });
 
 module.exports = router;
+module.exports.shipments = shipments;

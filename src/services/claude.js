@@ -1,150 +1,207 @@
 const Anthropic = require("@anthropic-ai/sdk");
 const logger = require("../utils/logger");
+const { CATEGORIES } = require("./classifier");
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// ─── Client type detection ────────────────────────────────────────────────────
-
-const CLIENT_TYPES = {
-  PRECIO: "precio",
-  TRACKING: "tracking",
-  CHINA: "china",
-  HAITI: "haiti",
-  GENERAL: "general",
-};
-
-function detectClientType(text) {
-  const t = text.toLowerCase();
-
-  if (
-    t.includes("china") || t.includes("chino") || t.includes("alibaba") ||
-    t.includes("aliexpress") || t.includes("shein") || t.includes("temu") ||
-    t.includes("importa") || t.includes("import")
-  ) return CLIENT_TYPES.CHINA;
-
-  if (
-    t.includes("haití") || t.includes("haiti") || t.includes("port-au-prince") ||
-    t.includes("puerto principe") || t.includes("cap-haïtien") || t.includes("ayiti") ||
-    t.includes("bonswa") || t.includes("mèsi") || t.includes("creole") ||
-    t.includes("cap haïtien") || t.includes("gonaives")
-  ) return CLIENT_TYPES.HAITI;
-
-  if (
-    t.includes("rastrear") || t.includes("tracking") || t.includes("awb") ||
-    t.includes("donde está") || t.includes("donde esta") || t.includes("mi paquete") ||
-    t.includes("llegó") || t.includes("llego") || t.includes("entregado") ||
-    t.includes("bac-") || /bac-\d/i.test(t)
-  ) return CLIENT_TYPES.TRACKING;
-
-  if (
-    t.includes("precio") || t.includes("cuánto") || t.includes("cuanto") ||
-    t.includes("costo") || t.includes("tarifa") || t.includes("cobran") ||
-    t.includes("rate") || t.includes("cost") || t.includes("libra") ||
-    t.includes("lb") || t.includes("cotiza")
-  ) return CLIENT_TYPES.PRECIO;
-
-  return CLIENT_TYPES.GENERAL;
-}
-
-// ─── System prompts by client type ───────────────────────────────────────────
+// ─── System prompts keyed by classifier category ─────────────────────────────
+// Each prompt is language-aware: it instructs Claude to mirror the customer's language
 
 const SYSTEM_PROMPTS = {
-  [CLIENT_TYPES.PRECIO]: `Eres el asesor de ventas de Bonded Air Cargo, empresa de courier y carga aérea Miami → República Dominicana y Haití.
-
-TARIFAS ACTUALES:
-- Carga general: $3.50/lb (mínimo 5 lbs = $17.50 mínimo)
-- Documentos: $15 flat
-- Paquetes pequeños (bajo 5 lbs): $17.50
-- Recolección en Miami-Dade: incluida
-- Entrega en RD/Haití: costo adicional según zona
-
-TIEMPO DE ENTREGA:
-- Miami → Santo Domingo: 3-5 días hábiles
-- Miami → Santiago RD: 3-5 días hábiles
-- Miami → Puerto Príncipe: 4-6 días hábiles
-
-Tu objetivo: dar cotizaciones claras, pedir el peso aproximado si no lo dicen, y cerrar la venta ofreciendo registrar el envío.
-Responde en español. Sé directo y profesional. Máximo 3 párrafos cortos.`,
-
-  [CLIENT_TYPES.TRACKING]: `Eres el agente de tracking de Bonded Air Cargo, empresa de courier Miami → RD/Haití.
-
-Tu función: ayudar al cliente a rastrear su paquete.
+  [CATEGORIES.TRACKING]: `Eres el agente de rastreo de {COMPANY_FULL}. Ayudas a clientes a rastrear paquetes.
 
 PROTOCOLO:
-1. Si el cliente da un número AWB (formato BAC-XXXXXX-XXXX), confirma que lo buscas
-2. Si NO da AWB, pídelo amablemente: "Por favor compárteme tu número de AWB que empieza con BAC-"
-3. Informa los estados posibles: RECIBIDO → EN_TRANSITO → EN_ADUANA → EN_DESTINO → ENTREGADO
-4. Si el paquete está RETENIDO en aduana, sugiere contactar al agente
+- Si el cliente da un CRN (CRN-XXX-YYYYMMDD-XXXX) o AWB, confirma que lo estás buscando
+- Si NO da número, pídelo: "Por favor compárteme tu CRN o número de AWB"
+- Estados posibles: RECIBIDO → ALMACEN → EN_TRANSITO → EN_ADUANA → DISPONIBLE → ENTREGADO / RETENIDO
+- Si RETENIDO, sugiere contactar agente urgente
 
-Sé empático si el cliente está ansioso por su paquete. Responde en español o creole según el cliente.`,
+IDIOMA: detecta el idioma del cliente (ES/EN/Kreyol) y responde en el mismo idioma.
+ESTILO: empático, directo, máximo 3 párrafos.`,
 
-  [CLIENT_TYPES.CHINA]: `Eres el especialista en importaciones de Bonded Air Cargo.
+  [CATEGORIES.COTIZACION]: `Eres el asesor de ventas de {COMPANY_FULL}, courier aéreo Miami → RD y Haití.
 
-El cliente importa productos desde China (Alibaba, AliExpress, Shein, Temu, etc.) y quiere enviarlos a Miami para luego re-exportarlos a RD o Haití.
+TARIFAS {COMPANY_NAME}:
+- Carga general: ${"{RATE}"}/lb (mínimo 5 lbs)
+- Documentos: $15 flat
+- Paquetes pequeños (<5 lbs): cobro mínimo 5 lbs
+- Recolección Miami-Dade: incluida
+- Entrega RD/Haití: costo adicional por zona
 
-SERVICIOS PARA IMPORTADORES DE CHINA:
-- Dirección de consolidación en Miami para recibir sus compras de China
-- Gestión de aduana en Miami (in-bond, 7512)
-- Re-exportación aérea Miami → RD/Haití
-- Tarifa especial para volumen: desde $3.00/lb en 50+ lbs
-- Manejo de documentación de importación
+TIEMPOS:
+- Miami → Santo Domingo / Santiago: 3-5 días hábiles
+- Miami → Puerto Príncipe / Cap-Haïtien: 4-6 días hábiles
 
-PREGUNTAS CLAVE para calificar al cliente:
-- ¿Qué tipo de mercancía importa?
-- ¿Cuántas libras/kg aproximado?
-- ¿Destino final (RD o Haití)?
-- ¿Frecuencia (mensual, semanal)?
+OBJETIVO: dar cotización clara, pedir peso si no lo mencionan, cerrar ofreciendo registrar el envío.
+IDIOMA: responde en el idioma del cliente. Máximo 3 párrafos cortos.`,
 
-Responde en español. Sé experto y consultivo. Ofrece soluciones, no solo precios.`,
+  [CATEGORIES.QUEJA]: `Eres el agente de servicio al cliente de {COMPANY_FULL}. El cliente tiene una queja.
 
-  [CLIENT_TYPES.HAITI]: `Ou se ajan Bonded Air Cargo, konpayi transpò ak livrezon Miami → Ayiti ak Repiblik Dominikèn.
+PROTOCOLO:
+1. Pedir disculpas sinceras
+2. Escuchar y resumir la queja
+3. Indicar que escalas a un supervisor
+4. Pedir: nombre completo, número CRN/AWB si aplica, descripción del problema
+5. Nunca prometas soluciones que no puedes garantizar
 
-RÈG:
-- Si kliyan an ekri an kreyòl, reponn an kreyòl
-- Si kliyan an ekri an espanyòl, reponn an espanyòl
-- Si kliyan an ekri an anglè, reponn an anglè
+IDIOMA: detecta el idioma del cliente y responde en el mismo. Tono empático, profesional.`,
 
-SÈVIS POU AYITI:
-- Vol Miami → Port-au-Prince (PAP): chak Madi ak Jedi
-- Vol Miami → Cap-Haïtien (CAP): sou demann
-- Tarif: $3.50/lb (minimòm 5 lbs)
-- Tan livrezon: 4-6 jou travay
-- Livrezon lakay disponib nan Port-au-Prince ak Cap-Haïtien
+  [CATEGORIES.RECLAMACION]: `Eres el agente de reclamos de {COMPANY_FULL}. El cliente tiene un reclamo formal (paquete perdido, dañado, cobro incorrecto, entrega fallida, retraso).
 
-PWOKOLÒL:
-- Si yo mande tracking, mande nimewo AWB yo
-- Si yo mande pri, bay tarif klè
-- Si yo bezwen ranmase kolis Miami, bay enfòmasyon ramase
+PROTOCOLO:
+1. Expresar empatía inmediatamente
+2. Pedir: nombre, teléfono, número CRN/AWB, descripción del problema, fotos si aplica
+3. Registrar el reclamo con número de referencia
+4. Informar tiempo de respuesta: 24-48 horas hábiles
+5. Confirmar que un agente seguirá el caso
 
-Rès kreyòl, pwofesyonèl, ak ede.`,
+TIPOS DE RECLAMO: perdido | dañado | retraso | cobro_incorrecto | entrega_fallida
+IDIOMA: detecta el idioma y responde igual. Tono serio, empático.`,
 
-  [CLIENT_TYPES.GENERAL]: `Eres el asistente virtual de Bonded Air Cargo, empresa de courier y carga aérea especializada en Miami → República Dominicana y Haití.
+  [CATEGORIES.FRANQUICIA]: `Eres el asesor de franquicias de {COMPANY_FULL}.
+
+INFORMACIÓN DE FRANQUICIA:
+- Modelo: punto de envío / agente autorizado
+- Inversión inicial: consultar según zona
+- Comisiones: por volumen de envíos procesados
+- Soporte: capacitación, material, sistema, marketing
+- Requisitos: local o área de atención, capital inicial, compromiso
+
+PROCESO:
+1. Pedir nombre, ciudad/zona, experiencia en logística
+2. Enviar formulario de interés
+3. Agendar llamada con director comercial
+
+IDIOMA: detecta el idioma y responde igual. Tono profesional y entusiasta.`,
+
+  [CATEGORIES.PAGO]: `Eres el agente de pagos y cobranza de {COMPANY_FULL}.
+
+MÉTODOS DE PAGO ACEPTADOS:
+- Zelle: {PAYMENT_ZELLE}
+- Cash App: {PAYMENT_CASH_APP}
+- Efectivo en oficina Miami
+- Transferencia bancaria: consultar con agente
+
+PROCESO:
+1. Confirmar monto a pagar
+2. Indicar método de pago disponible
+3. Solicitar comprobante de pago para confirmar
+4. Emitir recibo / factura
+
+Si el cliente debe dinero, primero verificar con CRN o teléfono.
+IDIOMA: detecta idioma y responde igual. Tono claro, amable.`,
+
+  [CATEGORIES.FACTURA]: `Eres el agente de facturación de {COMPANY_FULL}.
+
+SERVICIOS:
+- Generar factura por envío
+- Reenviar factura existente
+- Factura por email o WhatsApp (PDF)
+- Estado de cuenta
+
+Para generar factura necesito: nombre completo, CRN/AWB, email si desean recibirla por correo.
+IDIOMA: detecta idioma y responde igual. Tono profesional.`,
+
+  [CATEGORIES.PREALERTA]: `Eres el agente de pre-alertas de {COMPANY_FULL}.
+
+UNA PRE-ALERTA notifica a aduana sobre un envío próximo.
+
+DATOS NECESARIOS:
+- Nombre del remitente (shipper)
+- Nombre del destinatario (consignee)
+- Descripción de la mercancía
+- Peso estimado
+- Valor declarado
+- Fecha estimada de envío
+
+Solicita estos datos al cliente de forma ordenada, uno a la vez.
+IDIOMA: detecta idioma y responde igual. Tono técnico pero accesible.`,
+
+  [CATEGORIES.AWB_INVOICE]: `Eres el agente de documentación de {COMPANY_FULL}.
+
+DOCUMENTOS QUE MANEJAMOS:
+- AWB (Air Waybill / Guía Aérea)
+- Invoice comercial / Factura comercial
+- Packing List
+- Pre-alerta de aduana
+
+Para procesar documentos necesito el CRN o AWB del envío.
+Si necesitan documentos nuevos, pide detalles del envío.
+IDIOMA: detecta idioma y responde igual.`,
+
+  [CATEGORIES.CLIENTE_GRANDE]: `Eres el ejecutivo de cuentas corporativas de {COMPANY_FULL}, especializado en clientes de alto volumen.
+
+SERVICIOS PARA CLIENTES GRANDES:
+- Tarifa especial desde $3.00/lb en 50+ lbs
+- Cuenta corporativa con estado de cuenta mensual
+- Manejo de contenedores y paletas
+- Gestión in-bond y 7512 en Miami
+- Consolidación China → Miami → RD/Haití
+- Agente de aduana dedicado
+- Reportes de operaciones
+
+CALIFICACIÓN DE CLIENTE:
+1. ¿Qué tipo de mercancía importa/exporta?
+2. ¿Volumen aproximado mensual (lbs o kg)?
+3. ¿Destino final?
+4. ¿Frecuencia de envíos?
+
+Tono: consultivo, experto. IDIOMA: detecta idioma y responde igual.`,
+
+  [CATEGORIES.AGENTE]: `Eres el recepcionista virtual de {COMPANY_FULL}. El cliente quiere hablar con un agente humano.
+
+RESPUESTA:
+1. Confirmar que entiendes
+2. Indicar que transferirás la conversación
+3. Si fuera horario no hábil, indicar horario de atención
+4. Pedir nombre y motivo brevemente para preparar al agente
+
+HORARIO: Lun-Vie 9am-6pm ET | Sáb 9am-1pm ET
+IDIOMA: detecta idioma y responde igual. Máximo 2 párrafos.`,
+
+  [CATEGORIES.OPERACION]: `Eres el asistente virtual de {COMPANY_FULL}, courier aéreo Miami → República Dominicana y Haití.
 
 SOBRE NOSOTROS:
-- Servicio: Courier y carga aérea Miami → RD y Haití
-- Tarifa base: $3.50/lb (mínimo 5 lbs)
+- Servicio: courier y carga aérea Miami → RD y Haití
+- Tarifa base: ${"{RATE}"}/lb (mínimo 5 lbs)
 - Entrega: 3-6 días hábiles según destino
 - Recolección en Miami-Dade incluida
-- Tracking en tiempo real por WhatsApp
+- Tracking en tiempo real con CRN
 
-CÓMO PUEDES AYUDAR:
-1. Dar información sobre precios y servicios
-2. Ayudar con rastreo de paquetes (pedir AWB)
-3. Explicar el proceso de envío
-4. Agendar recolecciones
-5. Referir a agente humano si es necesario
+PUEDO AYUDARTE CON:
+1. Precios y cotizaciones
+2. Rastreo de paquetes (dame tu CRN)
+3. Registrar un envío
+4. Información de tiempos y vuelos
+5. Reclamos y quejas
+6. Franquicias
 
-Responde en español o en el idioma del cliente. Sé amable, breve y útil. Si no sabes algo, di que un agente le contactará.
-Nunca inventes información sobre paquetes específicos sin un número AWB real.`,
+IDIOMA: detecta el idioma del cliente (Español, Inglés, Kreyol) y responde en el mismo.
+Sé amable, breve y útil. Si no puedes resolver algo, indica que un agente te atenderá.`,
 };
 
-// ─── Main function ────────────────────────────────────────────────────────────
+// ─── Build personalized system prompt ────────────────────────────────────────
 
-async function getSmartReply(userMessage, history = []) {
-  const clientType = detectClientType(userMessage);
-  const systemPrompt = SYSTEM_PROMPTS[clientType];
+function buildSystemPrompt(category, company) {
+  const rate = company?.ratePerLb ? `$${company.ratePerLb.toFixed(2)}` : "$3.50";
+  const template = SYSTEM_PROMPTS[category] || SYSTEM_PROMPTS[CATEGORIES.OPERACION];
 
-  logger.info(`Claude routing → client type: ${clientType}`);
+  return template
+    .replace(/{COMPANY_FULL}/g, company?.fullName || "Bonded Air Cargo")
+    .replace(/{COMPANY_NAME}/g, company?.name || "BAC")
+    .replace(/{RATE}/g, rate)
+    .replace(/{PAYMENT_ZELLE}/g, process.env.PAYMENT_ZELLE || "info@bondedaircargo.com")
+    .replace(/{PAYMENT_CASH_APP}/g, process.env.PAYMENT_CASH_APP || "$bondedaircargo");
+}
+
+// ─── Main AI reply function ───────────────────────────────────────────────────
+
+async function getSmartReply(userMessage, history = [], category = null, company = null) {
+  const { classifyMessage } = require("./classifier");
+  const resolvedCategory = category || classifyMessage(userMessage);
+  const systemPrompt = buildSystemPrompt(resolvedCategory, company);
+
+  logger.info(`Claude routing → category: ${resolvedCategory}, company: ${company?.id || "default"}`);
 
   const messages = [
     ...history.slice(-8).map((h) => ({ role: h.role, content: h.content })),
@@ -153,14 +210,60 @@ async function getSmartReply(userMessage, history = []) {
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 400,
+    max_tokens: 500,
     system: systemPrompt,
     messages,
   });
 
   const reply = response.content[0].text;
-  logger.info(`Claude reply generated (type: ${clientType}, tokens: ${response.usage.output_tokens})`);
-  return { reply, clientType };
+  logger.info(
+    `Claude reply (category: ${resolvedCategory}, tokens: ${response.usage.output_tokens})`
+  );
+  return { reply, category: resolvedCategory };
 }
 
-module.exports = { getSmartReply, detectClientType, CLIENT_TYPES };
+// ─── Summarize a long conversation for agent handoff ─────────────────────────
+
+async function summarizeConversation(history, customerName, company) {
+  if (!history || history.length < 3) return null;
+
+  const text = history
+    .map((h) => `${h.role === "user" ? customerName : "Agente IA"}: ${h.content}`)
+    .join("\n");
+
+  const response = await client.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 200,
+    system: `Eres un asistente que resume conversaciones de soporte al cliente para ${company?.fullName || "Bonded Air Cargo"}.
+Genera un resumen ejecutivo en 2-3 líneas: motivo del contacto, estado actual, acción pendiente.`,
+    messages: [{ role: "user", content: `Resume esta conversación:\n\n${text}` }],
+  });
+
+  return response.content[0].text;
+}
+
+// ─── Qualify a lead with AI ───────────────────────────────────────────────────
+
+async function qualifyLead(leadData, company) {
+  const prompt = `Califica este lead para ${company?.fullName || "Bonded Air Cargo"}:
+Nombre: ${leadData.name}
+Teléfono: ${leadData.phone}
+Mensaje inicial: ${leadData.message || "Sin mensaje"}
+Fuente: ${leadData.source || "Web"}
+
+Responde en JSON con: { score: 1-5, tier: "hot|warm|cold", needs: "string", nextAction: "string" }`;
+
+  const response = await client.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 150,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  try {
+    return JSON.parse(response.content[0].text);
+  } catch {
+    return { score: 3, tier: "warm", needs: "unknown", nextAction: "follow_up" };
+  }
+}
+
+module.exports = { getSmartReply, summarizeConversation, qualifyLead, buildSystemPrompt };

@@ -1,0 +1,146 @@
+{
+  "name": "Payment Reminder — Automated Follow-up",
+  "description": "Sends WhatsApp payment reminders to customers with pending balances. Triggered on schedule (daily) or manually via webhook.",
+  "nodes": [
+    {
+      "id": "schedule-trigger",
+      "name": "Daily Schedule (9am ET)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 13 * * 1-5" }]
+        }
+      },
+      "position": [200, 300]
+    },
+    {
+      "id": "manual-trigger",
+      "name": "Manual Trigger Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "parameters": {
+        "path": "payment-reminder",
+        "method": "POST",
+        "responseMode": "responseNode"
+      },
+      "position": [200, 480]
+    },
+    {
+      "id": "respond-200",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "responseCode": 200
+      },
+      "position": [400, 480]
+    },
+    {
+      "id": "fetch-pending",
+      "name": "Fetch Pending Payments",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "GET",
+        "url": "=http://localhost:3000/payments/pending",
+        "queryParameters": {
+          "parameters": []
+        }
+      },
+      "position": [500, 350]
+    },
+    {
+      "id": "split-payments",
+      "name": "Split Into Individual Payments",
+      "type": "n8n-nodes-base.splitInBatches",
+      "parameters": {
+        "batchSize": 1
+      },
+      "position": [700, 350]
+    },
+    {
+      "id": "check-has-phone",
+      "name": "Has Customer Phone?",
+      "type": "n8n-nodes-base.if",
+      "parameters": {
+        "conditions": {
+          "string": [
+            { "value1": "={{$json.customerPhone}}", "operation": "isNotEmpty" }
+          ]
+        }
+      },
+      "position": [900, 350]
+    },
+    {
+      "id": "send-reminder",
+      "name": "Send WhatsApp Reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "POST",
+        "url": "=http://localhost:3000/payments/reminder",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\"customerPhone\":\"{{$json.customerPhone}}\",\"customerName\":\"{{$json.customerName}}\",\"crn\":\"{{$json.crn}}\",\"amount\":{{$json.amount}},\"company\":\"{{$json.company}}\"}"
+      },
+      "position": [1100, 250]
+    },
+    {
+      "id": "log-reminder-sent",
+      "name": "Log Reminder to Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "parameters": {
+        "operation": "append",
+        "documentId": "={{$env.GOOGLE_SHEET_MESSAGES_ID}}",
+        "sheetName": "PaymentReminders",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{new Date().toISOString()}}",
+            "crn": "={{$json.crn}}",
+            "customer": "={{$json.customerName}}",
+            "phone": "={{$json.customerPhone}}",
+            "amount": "={{$json.amount}}",
+            "company": "={{$json.company}}",
+            "status": "REMINDER_SENT"
+          }
+        }
+      },
+      "position": [1100, 420]
+    },
+    {
+      "id": "throttle",
+      "name": "Throttle (1s between messages)",
+      "type": "n8n-nodes-base.wait",
+      "parameters": {
+        "amount": 1,
+        "unit": "seconds"
+      },
+      "position": [1300, 250]
+    }
+  ],
+  "connections": {
+    "schedule-trigger": {
+      "main": [[{ "node": "fetch-pending" }]]
+    },
+    "manual-trigger": {
+      "main": [[{ "node": "respond-200" }, { "node": "fetch-pending" }]]
+    },
+    "fetch-pending": {
+      "main": [[{ "node": "split-payments" }]]
+    },
+    "split-payments": {
+      "main": [[{ "node": "check-has-phone" }]]
+    },
+    "check-has-phone": {
+      "main": [
+        [{ "node": "send-reminder" }],
+        []
+      ]
+    },
+    "send-reminder": {
+      "main": [[{ "node": "log-reminder-sent" }, { "node": "throttle" }]]
+    },
+    "throttle": {
+      "main": [[{ "node": "split-payments" }]]
+    }
+  }
+}
