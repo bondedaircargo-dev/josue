@@ -1,0 +1,54 @@
+services:
+  # ── Vortex App ──────────────────────────────────────────────────────────────
+  - type: web
+    name: vortex-ops
+    runtime: node
+    plan: starter          # $7/mes — cambia a 'standard' para más tráfico
+    buildCommand: npm install
+    startCommand: node scripts/check-env.js && node index.js
+    healthCheckPath: /dashboard/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      # Agrega el resto de variables en el panel de Render
+      # dashboard.render.com → Tu servicio → Environment
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: PHONE_NUMBER_ID
+        sync: false
+      - key: VERIFY_TOKEN
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: META_ADS_TOKEN
+        sync: false
+      - key: META_ADS_ACCOUNT_ID
+        sync: false
+      - key: GMAIL_USER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
+      - key: PAYMENT_ZELLE
+        sync: false
+      - key: PAYMENT_CASH_APP
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: vortex-db
+          property: connectionString
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  - type: pserv
+    name: vortex-db
+    runtime: docker
+    plan: starter          # PostgreSQL gratis en Render
+    image: postgres:16-alpine
+    envVars:
+      - key: POSTGRES_DB
+        value: vortex
+      - key: POSTGRES_USER
+        value: vortex
+      - key: POSTGRES_PASSWORD
+        generateValue: true

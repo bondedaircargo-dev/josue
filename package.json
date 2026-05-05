@@ -1,11 +1,18 @@
 {
-  "name": "bonded-air-cargo-automation",
-  "version": "2.0.0",
-  "description": "Sistema de automatización logística Miami → Dominican Republic / Haiti",
+  "name": "vortex-group-ai-operations",
+  "version": "3.0.0",
+  "description": "Sistema de operaciones logísticas con IA — Vortex Group (MCPack, GoPack, One Courier, Vortex)",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "setup": "bash scripts/setup.sh",
+    "check": "node scripts/check-env.js",
+    "db:migrate": "psql $DATABASE_URL -f supabase/migrations/001_schema.sql",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f app",
+    "docker:build": "docker compose build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.3",
@@ -16,9 +23,13 @@
     "googleapis": "^140.0.1",
     "nodemailer": "^6.9.14",
     "pdfkit": "^0.15.0",
+    "pg": "^8.20.0",
     "uuid": "^10.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
