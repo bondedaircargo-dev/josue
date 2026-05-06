@@ -12,6 +12,7 @@ const customersRouter = require("./src/routes/customers");
 const invoicesRouter = require("./src/routes/invoices");
 const campaignsRouter = require("./src/routes/campaigns");
 const reportsRouter = require("./src/routes/reports");
+const amazonHunterRouter = require("./src/routes/amazonHunter");
 
 app.use("/webhook", whatsappWebhook);
 app.use("/tracking", trackingRouter);
@@ -19,6 +20,7 @@ app.use("/customers", customersRouter);
 app.use("/invoices", invoicesRouter);
 app.use("/campaigns", campaignsRouter);
 app.use("/reports", reportsRouter);
+app.use("/amazon-hunter", amazonHunterRouter);
 
 // Root health check
 app.get("/", (req, res) => {
@@ -35,6 +37,11 @@ app.get("/", (req, res) => {
       "GET      /reports/health - System health check",
       "GET      /reports/awb    - AWB report PDF",
       "GET      /reports/ads    - Meta Ads report",
+      "POST     /amazon-hunter/search     - Hunt Amazon sellers importing from China",
+      "GET      /amazon-hunter/prospects  - List all qualified prospects",
+      "POST     /amazon-hunter/enrich     - AI-enrich a single prospect",
+      "POST     /amazon-hunter/outreach   - Send WhatsApp/email to a prospect",
+      "GET      /amazon-hunter/stats      - Pipeline stats",
     ],
   });
 });
