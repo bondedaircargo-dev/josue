@@ -75,4 +75,38 @@ async function logCustomer(customer) {
   ]);
 }
 
-module.exports = { appendRow, getRows, updateRow, logShipment, logCustomer };
+// Guarda CADA mensaje entrante en la hoja de mensajes (siempre agrega una fila)
+async function logMessage(msg) {
+  const sheetId = process.env.GOOGLE_SHEET_MESSAGES_ID;
+  if (!sheetId) return;
+  const { format } = require("date-fns");
+  return appendRow(sheetId, "Messages!A:E", [
+    format(new Date(), "yyyy-MM-dd HH:mm"),
+    msg.phone,
+    msg.name || "",
+    msg.text || "",
+    msg.type || "",
+  ]);
+}
+
+// Guarda el contacto solo si su teléfono no está ya en la hoja (evita duplicados)
+async function upsertCustomer(customer) {
+  const sheetId = process.env.GOOGLE_SHEET_CUSTOMERS_ID;
+  if (!sheetId) return;
+  try {
+    const rows = await getRows(sheetId, "Customers!B:B");
+    const exists = rows.some((r) => (r[0] || "").trim() === customer.phone);
+    if (exists) return;
+  } catch (_) {}
+  return logCustomer(customer);
+}
+
+module.exports = {
+  appendRow,
+  getRows,
+  updateRow,
+  logShipment,
+  logCustomer,
+  logMessage,
+  upsertCustomer,
+};

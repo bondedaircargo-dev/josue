@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const wa = require("../services/whatsapp");
+const sheets = require("../services/sheets");
 const { getSmartReply, detectClientType, CLIENT_TYPES } = require("../services/claude");
 const { sanitizeText } = require("../utils/helpers");
 const logger = require("../utils/logger");
@@ -46,6 +47,30 @@ router.post("/", async (req, res) => {
   const customerName = contact?.profile?.name || "Cliente";
 
   logger.info(`[${from}] ${customerName}: type=${msgType}`);
+
+  // ── Archivar TODO contacto/mensaje entrante en Google Sheets ──────────────
+  // Corre en segundo plano (fire-and-forget) para no retrasar la respuesta.
+  (async () => {
+    try {
+      let archiveText = "";
+      if (msgType === "text") archiveText = message.text?.body || "";
+      else if (msgType === "interactive")
+        archiveText =
+          message.interactive?.button_reply?.title ||
+          message.interactive?.list_reply?.title ||
+          "";
+      else archiveText = `[${msgType}]`;
+
+      let country = "";
+      if (from.startsWith("509")) country = "Haití";
+      else if (/^1(809|829|849)/.test(from)) country = "República Dominicana";
+
+      await sheets.logMessage({ phone: from, name: customerName, text: archiveText, type: msgType });
+      await sheets.upsertCustomer({ name: customerName, phone: from, country });
+    } catch (err) {
+      logger.error("Archivo en Google Sheets falló", { error: err.message });
+    }
+  })();
 
   // Mark message as read
   try { await wa.markAsRead(messageId); } catch (_) {}
